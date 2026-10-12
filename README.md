@@ -149,6 +149,32 @@ same goes for anything structural that doesn't hold, like a block whose id
 doesn't match its position or a chain that never ends: the file is refused
 rather than half-read. Everything left out is counted and reported.
 
+## Limitations
+
+- Only files from Scaffold 4.0 through 5.3.4 have been checked. Scaffold DDA
+  6.x files are untested and may be refused.
+- Only Mascot, Sequest, X! Tandem, MaxQuant, Spectrum Mill and MSFragger are
+  converted. Other engines' candidates are left out, since where their scores
+  sit isn't known yet.
+- X! Tandem's scores are named by offset, because Scaffold's own names for
+  them don't fit the values. MaxQuant's delta score and MSFragger's scores
+  have no PSI-MS term, so they are written as userParams.
+- Scaffold keeps at most 300 peaks per spectrum, so the MGFs are not the raw
+  spectra.
+- Spectra Scaffold stored without a charge have no m/z: they go into the MGF
+  without `PEPMASS`, and their candidates are left out of the mzIdentML.
+- Protein pass flags are rebuilt from the saved rule and may differ slightly
+  from Scaffold's own list.
+- Protein groups with no peptide Scaffold picked, and protein sequences with
+  a `*` inside, can't be written in valid mzIdentML and are left out. The
+  searched database itself isn't in the file, only the proteins it matched.
+- Some Scaffold 4.11 demo files store protein sequences that don't contain
+  their own peptides; those sequences are dropped.
+- Quantitation (TMT/iTRAQ reporter intensities, SILAC channels) and GO
+  annotations are not converted.
+- Large projects need a few GB of memory (2.3 GB for a 500 MB file), and an
+  mzIdentML with every candidate of every rank can run to hundreds of MB.
+
 ## License
 
 Apache 2.0.
