@@ -1,0 +1,24 @@
+[package]
+name = "sf3-decoder"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+description = "Binary to convert Proteome Software's .sf3 files into more commonly used formats."
+repository = "https://github.com/Xraytonex/sf3-decoder"
+
+[[bin]]
+name = "sf3decode"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+flate2 = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+thiserror = "2"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
