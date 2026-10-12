@@ -2,7 +2,9 @@
 
 pub mod chemistry;
 mod decoy;
+pub mod mgf;
 pub mod model;
+pub mod output;
 pub mod sf3;
 mod uniprot;
 

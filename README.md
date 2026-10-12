@@ -42,6 +42,16 @@ prints what the file holds: runs, spectra, each search engine's candidates,
 proteins, protein groups, the thresholds it was saved with, and anything the
 decoder had to leave out.
 
+```
+sf3decode project.sf3 mgf
+```
+
+writes one MGF per MS run, named after the run's raw file, with every
+spectrum Scaffold kept: title, precursor m/z and charge, retention time and
+peaks. Scaffold keeps at most 300 peaks per spectrum, so these are not the
+full raw spectra. Files are written next to the `.sf3` unless `-o folder`
+says otherwise, and existing files are only replaced with `--force`.
+
 The checks in `tests/samples.rs` run on real files when `SF3_SAMPLES` names
 a folder of them:
 

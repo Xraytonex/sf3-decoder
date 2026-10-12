@@ -1,8 +1,12 @@
-use std::path::PathBuf;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use sf3_decoder::Project;
+use sf3_decoder::mgf::write_mgf;
+use sf3_decoder::output::mgf_names;
 
 /// Convert Proteome Software's .sf3 files into more commonly used formats.
 #[derive(Parser)]
@@ -10,6 +14,20 @@ use sf3_decoder::Project;
 struct Args {
     /// The Scaffold .sf3 file.
     file: PathBuf,
+    /// What to write; without it, prints what the file holds.
+    format: Option<Format>,
+    /// Folder to write into [default: the .sf3 file's folder].
+    #[arg(short, long)]
+    out: Option<PathBuf>,
+    /// Replace files that already exist.
+    #[arg(long)]
+    force: bool,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Format {
+    /// One MGF per MS run, with every spectrum's peaks.
+    Mgf,
 }
 
 fn main() -> ExitCode {
@@ -21,8 +39,72 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    summary(&project);
-    ExitCode::SUCCESS
+    let Some(format) = args.format else {
+        summary(&project);
+        return ExitCode::SUCCESS;
+    };
+    let folder = args.out.clone().unwrap_or_else(|| {
+        args.file
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+    });
+    let written = match format {
+        Format::Mgf => mgf(&project, &folder, args.force),
+    };
+    match written {
+        Ok(()) => {
+            for note in &project.notes {
+                eprintln!("note: {note}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("sf3decode: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn mgf(project: &Project, folder: &Path, force: bool) -> Result<(), String> {
+    for (run, name) in mgf_names(project).iter().enumerate() {
+        let path = folder.join(name);
+        let mut out = create(&path, force)?;
+        let report = write_mgf(project, run, &mut out)
+            .and_then(|report| out.flush().map(|()| report))
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        eprintln!("wrote {} ({} spectra)", path.display(), report.spectra);
+        if report.unreadable > 0 {
+            eprintln!(
+                "  {} spectra written without peaks: their peak lists couldn't be read",
+                report.unreadable
+            );
+        }
+        if report.without_charge > 0 {
+            eprintln!(
+                "  {} spectra written without PEPMASS: Scaffold stored no charge for them",
+                report.without_charge
+            );
+        }
+    }
+    Ok(())
+}
+
+/// A new file; an existing one only with `--force`.
+fn create(path: &Path, force: bool) -> Result<BufWriter<File>, String> {
+    let mut options = OpenOptions::new();
+    options.write(true);
+    if force {
+        options.create(true).truncate(true);
+    } else {
+        options.create_new(true);
+    }
+    options.open(path).map(BufWriter::new).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("{} exists; use --force to replace it", path.display())
+        } else {
+            format!("{}: {error}", path.display())
+        }
+    })
 }
 
 /// What the file holds.
