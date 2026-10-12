@@ -4,7 +4,8 @@ Binary to convert Proteome Software's .sf3 files into more commonly used formats
 
 Scaffold saves its projects as `.sf3` files, and only Scaffold can open them.
 `sf3decode` reads one and writes out what's in it, including Scaffold's own
-probabilities, so the results can be used elsewhere.
+probabilities, so the results can be used elsewhere. As far as I know,
+Scaffold Viewer can't export .sf3 files into other formats.
 
 ## How this was made
 
