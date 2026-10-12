@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use sf3_decoder::chemistry::mass_error;
+use sf3_decoder::mgf::write_mgf;
+use sf3_decoder::mzid::write_mzid;
 
 fn samples() -> Vec<PathBuf> {
     let Some(folder) = std::env::var_os("SF3_SAMPLES") else {
@@ -61,6 +63,15 @@ fn every_sample_decodes_consistently() {
             picks.clone().all(|found| found.probability.is_some()),
             "{name}"
         );
+        let mut written = 0;
+        for run in 0..project.runs.len() {
+            written += write_mgf(&project, run, &mut std::io::sink())
+                .expect("writes")
+                .spectra;
+        }
+        assert_eq!(written, project.spectra.len(), "{name}");
+        let report = write_mzid(&project, &mut std::io::sink()).expect("writes");
+        assert!(report.candidates > 0, "{name}");
         eprintln!(
             "{name}: {} spectra, {with_peaks} with peaks, {} groups",
             project.spectra.len(),

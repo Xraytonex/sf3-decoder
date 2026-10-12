@@ -52,6 +52,21 @@ peaks. Scaffold keeps at most 300 peaks per spectrum, so these are not the
 full raw spectra. Files are written next to the `.sf3` unless `-o folder`
 says otherwise, and existing files are only replaced with `--force`.
 
+```
+sf3decode project.sf3 mzid
+```
+
+writes `project.mzid` (mzIdentML 1.2, valid against the official schema).
+It has every candidate each search engine kept for each spectrum, ranked by
+that engine's score, with its scores, and Scaffold's peptide probability on
+each one. `passThreshold` is Scaffold's call: the candidate it picked for the
+spectrum, at or above the peptide probability the project was saved with.
+Scaffold's protein groups come with their protein probability, overall and
+per run. Their pass flag is rebuilt from the saved rule (protein probability
+in a run, plus the minimum number of peptides Scaffold picked there), so it
+may differ slightly from Scaffold's own list. Spectra are referenced by their
+position in the MGF files above, so write both into the same folder.
+
 The checks in `tests/samples.rs` run on real files when `SF3_SAMPLES` names
 a folder of them:
 

@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use clap::{Parser, ValueEnum};
 use sf3_decoder::Project;
 use sf3_decoder::mgf::write_mgf;
+use sf3_decoder::mzid::write_mzid;
 use sf3_decoder::output::mgf_names;
 
 /// Convert Proteome Software's .sf3 files into more commonly used formats.
@@ -28,6 +29,10 @@ struct Args {
 enum Format {
     /// One MGF per MS run, with every spectrum's peaks.
     Mgf,
+    /// mzIdentML 1.2: every engine's candidates, Scaffold's probabilities
+    /// and protein groups.
+    #[value(alias = "mzidentml")]
+    Mzid,
 }
 
 fn main() -> ExitCode {
@@ -50,6 +55,10 @@ fn main() -> ExitCode {
     });
     let written = match format {
         Format::Mgf => mgf(&project, &folder, args.force),
+        Format::Mzid => {
+            let stem = args.file.file_stem().unwrap_or_default().to_string_lossy();
+            mzid(&project, &folder.join(format!("{stem}.mzid")), args.force)
+        }
     };
     match written {
         Ok(()) => {
@@ -85,6 +94,39 @@ fn mgf(project: &Project, folder: &Path, force: bool) -> Result<(), String> {
                 report.without_charge
             );
         }
+    }
+    Ok(())
+}
+
+fn mzid(project: &Project, path: &Path, force: bool) -> Result<(), String> {
+    let mut out = create(path, force)?;
+    let report = write_mzid(project, &mut out)
+        .and_then(|report| out.flush().map(|()| report))
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    eprintln!(
+        "wrote {} ({} candidates, {} protein groups)",
+        path.display(),
+        report.candidates,
+        report.groups
+    );
+    if report.groups_without_peptides > 0 {
+        eprintln!(
+            "  {} protein groups left out: none of their peptides is a candidate Scaffold picked",
+            report.groups_without_peptides
+        );
+    }
+    if report.sequences_left_out > 0 {
+        eprintln!(
+            "  {} protein sequences left out: they hold a * inside, which mzIdentML doesn't allow",
+            report.sequences_left_out
+        );
+    }
+    if report.unknown_modifications > 0 {
+        eprintln!(
+            "  {} modifications not in the Unimod table written as \"unknown modification\" \
+             with their name and mass",
+            report.unknown_modifications
+        );
     }
     Ok(())
 }
