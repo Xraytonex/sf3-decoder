@@ -169,20 +169,16 @@ pub(crate) fn proteins_of(
             other => other,
         };
         if let Reported::Whole(accession) | Reported::Completed(accession) = settled {
-            proteins.push(ProteinRef {
+            proteins.push(ProteinRef::new(
                 accession,
-                pre: flank(flanks[0]),
-                post: flank(flanks[1]),
-            });
+                flank(flanks[0]),
+                flank(flanks[1]),
+            ));
         }
     }
     for accession in listed.into_iter().flatten() {
         if !proteins.iter().any(|known| &known.accession == accession) {
-            proteins.push(ProteinRef {
-                accession: accession.clone(),
-                pre: None,
-                post: None,
-            });
+            proteins.push(ProteinRef::new(accession.clone(), None, None));
         }
     }
     Some(proteins)

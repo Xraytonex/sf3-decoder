@@ -7,12 +7,14 @@ use std::io::{self, Write};
 use crate::model::Project;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MgfReport {
     pub spectra: usize,
     /// Written without peaks: their stored peak list couldn't be read.
     pub unreadable: usize,
-    /// Written without PEPMASS: Scaffold stores no charge for them, and so
-    /// no m/z.
+    /// Written without CHARGE, or without PEPMASS and CHARGE: the file
+    /// stores no charge (`.sf3` stores [M+H]+, so its m/z needs one) or no
+    /// precursor m/z.
     pub without_charge: usize,
 }
 
@@ -24,14 +26,19 @@ pub fn write_mgf(project: &Project, run: usize, out: &mut impl Write) -> io::Res
         let title = spectrum
             .title
             .clone()
-            .unwrap_or_else(|| format!("sf3 spectrum {}", spectrum.id));
+            .unwrap_or_else(|| format!("{} spectrum {}", project.format.as_str(), spectrum.id));
         writeln!(out, "TITLE={}", title.replace(['\r', '\n'], " "))?;
+        // `.sf3` stores [M+H]+, so its m/z needs the charge; `.sfdb` stores
+        // the m/z itself.
         match (spectrum.precursor_mz(), spectrum.charge) {
-            (Some(mz), Some(charge)) => {
+            (Some(mz), charge) => {
                 writeln!(out, "PEPMASS={mz:.6}")?;
-                writeln!(out, "CHARGE={charge}+")?;
+                match charge {
+                    Some(charge) => writeln!(out, "CHARGE={charge}+")?,
+                    None => report.without_charge += 1,
+                }
             }
-            _ => report.without_charge += 1,
+            (None, _) => report.without_charge += 1,
         }
         if let Some(scan) = spectrum.scan {
             writeln!(out, "SCANS={scan}")?;

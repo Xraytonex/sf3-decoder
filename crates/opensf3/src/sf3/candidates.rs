@@ -64,11 +64,9 @@ impl Expectation {
                 (name, None, 10f64.powf(-f64::from(read_f32(block, offset)?)))
             }
         };
-        value.is_finite().then_some(Score {
-            name,
-            accession,
-            value,
-        })
+        value
+            .is_finite()
+            .then(|| Score::new(name, accession.map(Into::into), value))
     }
 }
 
@@ -426,11 +424,9 @@ impl Peptides<'_> {
             .iter()
             .filter_map(|&(offset, name, accession)| {
                 let value = f64::from(read_f32(block, offset)?);
-                value.is_finite().then_some(Score {
-                    name,
-                    accession,
-                    value,
-                })
+                value
+                    .is_finite()
+                    .then(|| Score::new(name, accession.map(Into::into), value))
             })
             .chain(engine.expectation.and_then(|kind| kind.score(block)))
             .collect();

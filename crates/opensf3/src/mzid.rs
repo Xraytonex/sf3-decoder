@@ -10,13 +10,17 @@
 //!   protein probability (MS:1001579; per run as userParams). The schema
 //!   wants peptides behind every protein, so each is backed by the
 //!   candidates Scaffold picked; proteins without one are left out.
+//! - `.sfdb` projects carry no Scaffold verdicts: every candidate is written
+//!   with its engine's scores under a "no threshold" protocol (so
+//!   `passThreshold` is true, as the specification asks when no threshold
+//!   was applied), and there is no protein detection.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::{self, Write};
 
 use crate::chemistry::PROTON;
-use crate::model::{Match, Modification, Project, Site, Spectrum, Thresholds};
+use crate::model::{Format, Match, Modification, Project, ProteinRef, Site, Spectrum, Thresholds};
 use crate::output::mgf_names;
 use crate::unimod;
 
@@ -24,6 +28,7 @@ use crate::unimod;
 const PROBABILITY_SLACK: f64 = 1e-6;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MzidReport {
     pub candidates: usize,
     pub groups: usize,
@@ -48,7 +53,26 @@ pub fn write_mzid(project: &Project, out: &mut impl Write) -> io::Result<MzidRep
     Ok(writer.report)
 }
 
-type EvidenceKey<'a> = (usize, &'a str, Option<char>, Option<char>);
+/// (peptide, accession, pre, post, start, end)
+type EvidenceKey<'a> = (
+    usize,
+    &'a str,
+    Option<char>,
+    Option<char>,
+    Option<u32>,
+    Option<u32>,
+);
+
+fn evidence_key(peptide: usize, protein: &ProteinRef) -> EvidenceKey<'_> {
+    (
+        peptide,
+        protein.accession.as_str(),
+        protein.pre,
+        protein.post,
+        protein.start,
+        protein.end,
+    )
+}
 
 /// Ids for everything referenced across the file.
 struct Index<'a> {
@@ -97,12 +121,7 @@ impl<'a> Index<'a> {
                     }
                 };
                 for protein in &found.proteins {
-                    let key = (
-                        peptide,
-                        protein.accession.as_str(),
-                        protein.pre,
-                        protein.post,
-                    );
+                    let key = evidence_key(peptide, protein);
                     if !index.evidence_ids.contains_key(&key) {
                         index.evidence.push(key);
                         index.evidence_ids.insert(key, index.evidence.len() - 1);
@@ -120,14 +139,7 @@ impl<'a> Index<'a> {
         found
             .proteins
             .iter()
-            .map(|protein| {
-                self.evidence_ids[&(
-                    peptide,
-                    protein.accession.as_str(),
-                    protein.pre,
-                    protein.post,
-                )]
-            })
+            .map(|protein| self.evidence_ids[&evidence_key(peptide, protein)])
             .collect()
     }
 }
@@ -167,10 +179,17 @@ impl<'a, W: Write> Writer<'a, W> {
         for engine in self.index.engines.clone() {
             self.spectra(engine)?;
         }
-        self.groups()?;
+        if self.detects_proteins() {
+            self.groups()?;
+        }
         self.put("    </AnalysisData>")?;
         self.put("  </DataCollection>")?;
         self.put("</MzIdentML>")
+    }
+
+    /// Only `.sf3` projects hold Scaffold's protein groups.
+    fn detects_proteins(&self) -> bool {
+        self.project.format == Format::Sf3
     }
 
     fn software(&mut self) -> io::Result<()> {
@@ -259,11 +278,16 @@ impl<'a, W: Write> Writer<'a, W> {
             self.put("    </Peptide>")?;
         }
         for id in 0..self.index.evidence.len() {
-            let (peptide, accession, pre, post) = self.index.evidence[id];
+            let (peptide, accession, pre, post, start, end) = self.index.evidence[id];
             let protein = self.index.proteins[accession];
             let mut attributes = format!(
                 r#"id="PE_{id}" peptide_ref="Pep_{peptide}" dBSequence_ref="DBSeq_{protein}""#
             );
+            for (name, position) in [("start", start), ("end", end)] {
+                if let Some(position) = position {
+                    let _ = write!(attributes, r#" {name}="{position}""#);
+                }
+            }
             for (name, residue) in [("pre", pre), ("post", post)] {
                 if let Some(residue) = residue.filter(|r| r.is_ascii_uppercase() || *r == '-') {
                     let _ = write!(attributes, r#" {name}="{residue}""#);
@@ -291,13 +315,15 @@ impl<'a, W: Write> Writer<'a, W> {
             self.put(r#"      <SearchDatabaseRef searchDatabase_ref="SDB"/>"#)?;
             self.put("    </SpectrumIdentification>")?;
         }
-        self.put(r#"    <ProteinDetection id="PD" proteinDetectionProtocol_ref="PDP" proteinDetectionList_ref="PDL">"#)?;
-        for engine in self.index.engines.clone() {
-            self.put(&format!(
-                r#"      <InputSpectrumIdentifications spectrumIdentificationList_ref="SIL_{engine}"/>"#
-            ))?;
+        if self.detects_proteins() {
+            self.put(r#"    <ProteinDetection id="PD" proteinDetectionProtocol_ref="PDP" proteinDetectionList_ref="PDL">"#)?;
+            for engine in self.index.engines.clone() {
+                self.put(&format!(
+                    r#"      <InputSpectrumIdentifications spectrumIdentificationList_ref="SIL_{engine}"/>"#
+                ))?;
+            }
+            self.put("    </ProteinDetection>")?;
         }
-        self.put("    </ProteinDetection>")?;
         self.put("  </AnalysisCollection>")
     }
 
@@ -322,6 +348,9 @@ impl<'a, W: Write> Writer<'a, W> {
             self.put(r#"      <SearchType><cvParam cvRef="PSI-MS" accession="MS:1001083" name="ms-ms search"/></SearchType>"#)?;
             self.put(&format!("      <Threshold>{peptide}</Threshold>"))?;
             self.put("    </SpectrumIdentificationProtocol>")?;
+        }
+        if !self.detects_proteins() {
+            return self.put("  </AnalysisProtocolCollection>");
         }
         self.put(r#"    <ProteinDetectionProtocol id="PDP" analysisSoftware_ref="AS_scaffold">"#)?;
         match thresholds {
@@ -405,7 +434,7 @@ impl<'a, W: Write> Writer<'a, W> {
 
     fn item(&mut self, spectrum: &Spectrum, number: usize, found: &'a Match) -> io::Result<()> {
         self.report.candidates += 1;
-        let charge = spectrum.charge.unwrap_or(0);
+        let charge = found.charge.or(spectrum.charge).unwrap_or(0);
         let mut attributes = format!(
             r#"id="{}" chargeState="{charge}" experimentalMassToCharge="{}""#,
             item_id(found.engine, spectrum, number),
@@ -433,7 +462,7 @@ impl<'a, W: Write> Writer<'a, W> {
         for score in &found.scores {
             self.put(&format!(
                 "            {}",
-                param(score.name, score.accession, score.value)
+                param(&score.name, score.accession.as_deref(), score.value)
             ))?;
         }
         if let Some(probability) = found.probability {

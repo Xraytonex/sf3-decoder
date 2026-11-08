@@ -6,7 +6,7 @@
 
 mod accessions;
 mod blockbased;
-mod candidates;
+pub(crate) mod candidates;
 mod java;
 pub(crate) mod peaks;
 mod project;
@@ -17,7 +17,10 @@ use std::path::Path;
 
 use crate::chemistry::mass_error;
 use crate::decoy::is_decoy_accession;
-use crate::model::{Engine, Match, Peptide, Project, Protein, ProteinGroup, Run, Score, Spectrum};
+use crate::model::{
+    Engine, Format, Match, PeakSource, Peptide, Project, Protein, ProteinGroup, Run, Score,
+    Spectrum,
+};
 use crate::titles::{drop_clashing_scans, scan_from_title};
 use accessions::{proteins_of, Completions, INLINE_ACCESSION_MAX, PROTEIN_BLOCK};
 use candidates::{analysis_of, engine_scores, Candidate, EngineScores, Peptides, PEPTIDE_BLOCK};
@@ -228,6 +231,7 @@ pub fn decode(path: &Path) -> Result<Project, Sf3Error> {
                 rank,
                 peptide: candidate.peptide,
                 mass: candidate.mass,
+                charge: spectrum.charge,
                 scores: candidate.scores,
                 proteins,
                 probability: candidate.probability,
@@ -268,6 +272,7 @@ pub fn decode(path: &Path) -> Result<Project, Sf3Error> {
     });
     Ok(Project {
         name,
+        format: Format::Sf3,
         scaffold_version: container.version(),
         runs: runs
             .into_iter()
@@ -283,7 +288,7 @@ pub fn decode(path: &Path) -> Result<Project, Sf3Error> {
         groups,
         thresholds,
         notes: notes.lines(),
-        peaks,
+        peaks: peaks.map(PeakSource::Sf3),
     })
 }
 
@@ -301,21 +306,21 @@ fn spectra(
             let title = titles
                 .string(read_i32(block, 8).unwrap_or(0))
                 .filter(|title| !title.trim().is_empty());
-            Some(Spectrum {
+            let mut spectrum = Spectrum::from_mh(
                 id,
                 run,
-                scan: title.as_deref().and_then(scan_from_title),
                 title,
-                mh: read_f64(block, 12).filter(|mh| mh.is_finite() && *mh > 0.0),
-                charge: read_i32(block, 20)
+                read_f64(block, 12).filter(|mh| mh.is_finite() && *mh > 0.0),
+                read_i32(block, 20)
                     .and_then(|charge| u8::try_from(charge).ok())
                     .filter(|&charge| charge > 0),
-                rt_seconds: read_f32(block, 32)
-                    .filter(|rt| rt.is_finite() && *rt > 0.0)
-                    .map(f64::from),
-                peak_list: read_i32(block, 4).unwrap_or(0),
-                matches: Vec::new(),
-            })
+            );
+            spectrum.scan = spectrum.title.as_deref().and_then(scan_from_title);
+            spectrum.rt_seconds = read_f32(block, 32)
+                .filter(|rt| rt.is_finite() && *rt > 0.0)
+                .map(f64::from);
+            spectrum.peak_list = read_i32(block, 4).unwrap_or(0);
+            Some(spectrum)
         })
         .collect()
 }

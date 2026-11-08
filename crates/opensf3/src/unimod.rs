@@ -60,6 +60,39 @@ const TABLE: &[(u32, &str, f64)] = &[
 ];
 
 const MASS_TOLERANCE: f64 = 0.01;
+/// Deltas this close to a table entry are that modification reported at
+/// lower precision (3-decimal engines are within 0.0005). Small enough to
+/// keep TMTpro (304.2071) and iTRAQ8plex (304.2054) apart.
+pub(crate) const SNAP_TOLERANCE: f64 = 0.001;
+
+/// Unimod's own name for a modification of about `mass_delta` whose name
+/// agrees with it: the same name in any case, or the Unimod name followed
+/// by `_` (Scaffold writes `Phospho_STY`).
+pub(crate) fn named_by_mass(name: &str, mass_delta: f64) -> Option<&'static str> {
+    let lowered = name.to_ascii_lowercase();
+    TABLE
+        .iter()
+        .filter(|(_, _, mass)| (mass - mass_delta).abs() <= SNAP_TOLERANCE)
+        .find(|(_, known, _)| {
+            let known = known.to_ascii_lowercase();
+            lowered == known || lowered.starts_with(&format!("{known}_"))
+        })
+        .map(|(_, known, _)| *known)
+}
+
+/// Unimod's name for an accession like `UNIMOD:35`, when its mass is about
+/// `mass_delta`.
+pub(crate) fn named_by_accession(accession: &str, mass_delta: f64) -> Option<&'static str> {
+    let number: u32 = accession
+        .strip_prefix("UNIMOD:")
+        .or_else(|| accession.strip_prefix("unimod:"))?
+        .parse()
+        .ok()?;
+    TABLE
+        .iter()
+        .find(|(id, _, mass)| *id == number && (mass - mass_delta).abs() <= SNAP_TOLERANCE)
+        .map(|(_, known, _)| *known)
+}
 
 /// `("UNIMOD:35", "Oxidation")` for a modification named `Oxidation` (any
 /// case) of about +15.995 Da.
@@ -84,5 +117,24 @@ mod tests {
         );
         assert_eq!(lookup("Oxidation", 31.99), None);
         assert_eq!(lookup("Nonsense", 1.0), None);
+    }
+
+    #[test]
+    fn scaffold_names_find_unimod_by_mass_and_name() {
+        assert_eq!(
+            named_by_mass("Phospho_STY", 79.966_331_481_933_6),
+            Some("Phospho")
+        );
+        assert_eq!(named_by_mass("acetyl", 42.010_565), Some("Acetyl"));
+        // Two entries share -18.0106; the name picks one.
+        assert_eq!(named_by_mass("Dehydrated", -18.010_565), Some("Dehydrated"));
+        assert_eq!(named_by_mass("Acetyl", 42.02), None);
+        assert_eq!(named_by_mass("Mystery", 15.994_915), None);
+        assert_eq!(
+            named_by_accession("UNIMOD:4", 57.021_464),
+            Some("Carbamidomethyl")
+        );
+        assert_eq!(named_by_accession("UNIMOD:1047", 42.010_565), None);
+        assert_eq!(named_by_accession("UNIMOD:35", 31.99), None);
     }
 }
