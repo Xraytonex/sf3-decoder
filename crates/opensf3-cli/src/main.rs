@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, ValueEnum};
-use sf3_decoder::Project;
-use sf3_decoder::mgf::write_mgf;
-use sf3_decoder::mzid::write_mzid;
-use sf3_decoder::output::mgf_names;
+use opensf3::mgf::write_mgf;
+use opensf3::mzid::write_mzid;
+use opensf3::output::mgf_names;
+use opensf3::Project;
 
 /// Convert Proteome Software's .sf3 files into more commonly used formats.
 #[derive(Parser)]
@@ -37,7 +37,7 @@ enum Format {
 
 fn main() -> ExitCode {
     let args = Args::parse();
-    let project = match sf3_decoder::decode(&args.file) {
+    let project = match opensf3::decode(&args.file) {
         Ok(project) => project,
         Err(error) => {
             eprintln!("sf3decode: {}: {error}", args.file.display());

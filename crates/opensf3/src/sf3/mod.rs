@@ -18,10 +18,10 @@ use std::path::Path;
 use crate::chemistry::mass_error;
 use crate::decoy::is_decoy_accession;
 use crate::model::{Engine, Match, Peptide, Project, Protein, ProteinGroup, Run, Score, Spectrum};
-use accessions::{Completions, INLINE_ACCESSION_MAX, PROTEIN_BLOCK, proteins_of};
-use candidates::{Candidate, EngineScores, PEPTIDE_BLOCK, Peptides, analysis_of, engine_scores};
+use accessions::{proteins_of, Completions, INLINE_ACCESSION_MAX, PROTEIN_BLOCK};
+use candidates::{analysis_of, engine_scores, Candidate, EngineScores, Peptides, PEPTIDE_BLOCK};
 use peaks::PeakStore;
-use records::{Container, Records, read_f32, read_f64, read_i32};
+use records::{read_f32, read_f64, read_i32, Container, Records};
 
 /// Daltons; far beyond any search tolerance, near any decoding error.
 pub const MAX_MASS_ERROR: f64 = 1.0;
@@ -48,7 +48,7 @@ pub enum Sf3Error {
     },
     #[error(
         "{file}: {problem}. This file's layout differs from the Scaffold versions the decoder \
-         knows (4.0–5.3.4), so it was refused rather than guessed at"
+         knows (4.0-5.3.4), so it was refused rather than guessed at"
     )]
     Layout { file: String, problem: String },
 }
@@ -115,7 +115,7 @@ pub fn decode(path: &Path) -> Result<Project, Sf3Error> {
         .collect();
     let mut notes = Notes::default();
 
-    // (spectrum, engine) → candidates, in record order.
+    // (spectrum, engine) -> candidates, in record order.
     let mut engines: Vec<Engine> = Vec::new();
     let mut layouts: HashMap<u8, Option<(usize, EngineScores)>> = HashMap::new();
     let mut groups: BTreeMap<(i32, usize), Vec<Candidate>> = BTreeMap::new();
@@ -355,7 +355,7 @@ fn rank(candidates: Vec<Resolved>, notes: &mut Notes) -> Vec<(u32, Resolved)> {
     ranked
 }
 
-/// Spectrum id → index of its run, from each run's listed analyses.
+/// Spectrum id -> index of its run, from each run's listed analyses.
 fn spectrum_runs(
     runs: &[project::Run],
     analyses: &Records,

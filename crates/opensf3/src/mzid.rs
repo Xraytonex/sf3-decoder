@@ -5,7 +5,7 @@
 //!   with those scores and Scaffold's peptide probability (MS:1001568).
 //! - `passThreshold` is Scaffold's verdict: the candidate it picked for the
 //!   spectrum, at or above the project's saved peptide probability.
-//! - Spectra are `index=N` in their run's MGF, as `sf3decode … mgf` writes it.
+//! - Spectra are `index=N` in their run's MGF, as `sf3decode ... mgf` writes it.
 //! - Scaffold's protein groups make the `ProteinDetectionList`, with its
 //!   protein probability (MS:1001579; per run as userParams). The schema
 //!   wants peptides behind every protein, so each is backed by the
@@ -449,9 +449,9 @@ impl<'a, W: Write> Writer<'a, W> {
 
     fn groups(&mut self) -> io::Result<()> {
         let project = self.project;
-        // accession → evidence → items Scaffold picked
+        // accession -> evidence -> items Scaffold picked
         let mut picked: HashMap<&str, BTreeMap<usize, Vec<String>>> = HashMap::new();
-        // (run, accession) → sequences Scaffold picked at its threshold
+        // (run, accession) -> sequences Scaffold picked at its threshold
         let mut confident: HashMap<(usize, &str), HashSet<&str>> = HashMap::new();
         for spectrum in &project.spectra {
             for (number, found) in spectrum.matches.iter().enumerate() {

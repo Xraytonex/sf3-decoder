@@ -1,0 +1,23 @@
+[package]
+name = "opensf3-cli"
+description = "sf3decode: convert Scaffold .sf3 and .sfdb files to MGF, mzIdentML and mzML."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "sf3decode"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+openmassspec-core = { workspace = true }
+opensf3 = { workspace = true }

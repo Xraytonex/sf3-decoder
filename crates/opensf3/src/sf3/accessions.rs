@@ -3,7 +3,7 @@
 //! Each record names the protein the engine reported (a
 //! `ProteinIdentification`), whose accession is stored inline cut at 22
 //! characters, so a decoy `tr|A0QSM5|A0QSM5_MYCS2-DECOY` reads as its
-//! target. A name that long is completed from Scaffold's peptide → protein
+//! target. A name that long is completed from Scaffold's peptide -> protein
 //! map, as a decoy when it ends in part of `-DECOY`, else by its target's
 //! stored sequence (the peptide read forwards or backwards in it).
 
@@ -61,7 +61,7 @@ fn reported(inline: &[u8], listed: Option<&[String]>) -> Reported {
 }
 
 /// Scaffold's decoys are their target's accession plus `-DECOY`, so a cut
-/// name ending in the start of that suffix is a decoy (`…_MYCS2-` from a
+/// name ending in the start of that suffix is a decoy (`..._MYCS2-` from a
 /// 21-character target).
 fn decoy_completion(cut: &str) -> Option<String> {
     const SUFFIX: &str = "-DECOY";

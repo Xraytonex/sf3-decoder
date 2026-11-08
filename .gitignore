@@ -1,4 +1,7 @@
 /target
 *.sf3
+*.sfdb
 *.mgf
 *.mzid
+*.mzML
+*.mzml

@@ -5,12 +5,14 @@
 
 use std::sync::Arc;
 
+use super::records::fixed;
+
 const MAGIC: u16 = 0xACED;
 const VERSION: u16 = 5;
 const BASE_HANDLE: u32 = 0x7E_0000;
 /// Nesting deeper than this is refused rather than risking the stack.
 const MAX_DEPTH: usize = 1_000;
-/// Values one stream may decode to: about 3× the largest real project seen
+/// Values one stream may decode to: about 3x the largest real project seen
 /// (a 5.3.3 Experiment of 128 MB holding 856,290 score objects decodes to
 /// ~27 million; decoding it peaks at 2.2 GB), far below what exhausts
 /// memory. Primitive array elements count one each.
@@ -283,7 +285,7 @@ impl Reader<'_> {
 
     fn array<const N: usize>(&mut self) -> Result<[u8; N], JavaError> {
         let bytes = self.take(N)?;
-        Ok(bytes.try_into().expect("length checked"))
+        Ok(fixed(bytes))
     }
 
     fn u8(&mut self) -> Result<u8, JavaError> {
@@ -342,7 +344,7 @@ impl Reader<'_> {
     fn i32_at(&self, offset: usize) -> Result<i32, JavaError> {
         self.data
             .get(offset..offset + 4)
-            .map(|bytes| i32::from_be_bytes(bytes.try_into().expect("four bytes")))
+            .map(|bytes| i32::from_be_bytes(fixed(bytes)))
             .ok_or_else(|| self.error("stream ends early"))
     }
 

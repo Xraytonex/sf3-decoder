@@ -1,0 +1,25 @@
+[package]
+name = "opensf3"
+description = "Reader for Proteome Software Scaffold .sf3 and .sfdb files: identifications, stored peak lists, MGF, mzIdentML and mzML."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[features]
+default = ["mzid"]
+# mzIdentML 1.2 writer.
+mzid = []
+
+[dependencies]
+flate2 = { workspace = true }
+openmassspec-core = { workspace = true }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }

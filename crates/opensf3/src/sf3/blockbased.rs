@@ -14,9 +14,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::java::{self, ArrayData, SC_WRITE_METHOD, Stream};
-use super::records::Container;
-use super::{Sf3Error, layout};
+use super::java::{self, ArrayData, Stream, SC_WRITE_METHOD};
+use super::records::{fixed, Container};
+use super::{layout, Sf3Error};
 
 const MAX_DEPTH: usize = 256;
 /// Values one file may decode to; far above any real project's, far below
@@ -184,7 +184,7 @@ impl Reader<'_> {
     }
 
     fn le_i32(&mut self) -> Result<i32, String> {
-        Ok(i32::from_le_bytes(self.take(4)?.try_into().expect("four")))
+        Ok(i32::from_le_bytes(fixed(self.take(4)?)))
     }
 
     fn length(&mut self, element_size: usize) -> Result<usize, String> {
@@ -229,13 +229,12 @@ impl Reader<'_> {
         let value = match self.take(1)?[0] {
             0x70 => BbValue::Null,
             0x74 => {
-                let length =
-                    usize::from(u16::from_le_bytes(self.take(2)?.try_into().expect("two")));
+                let length = usize::from(u16::from_le_bytes(fixed(self.take(2)?)));
                 BbValue::Str(String::from_utf8_lossy(self.take(length)?).into_owned())
             }
             0x7c => {
                 // A long string: little-endian i64 length (e.g. titin's sequence).
-                let length = i64::from_le_bytes(self.take(8)?.try_into().expect("eight"));
+                let length = i64::from_le_bytes(fixed(self.take(8)?));
                 let length = usize::try_from(length)
                     .ok()
                     .filter(|&length| length <= self.data.len() - self.pos)
@@ -271,9 +270,8 @@ impl Reader<'_> {
                 _ => return None,
             })
         };
-        match element {
-            Some(code) if primitive(code).is_some() => {
-                let size = primitive(code).expect("checked");
+        match element.and_then(|code| Some((code, primitive(code)?))) {
+            Some((code, size)) => {
                 let length = self.length(size)?;
                 let bytes = self.take(length * size)?.to_vec();
                 Ok(BbValue::Array(
@@ -296,8 +294,9 @@ impl Reader<'_> {
     fn object(&mut self) -> Result<BbValue, String> {
         let class = self.class()?.ok_or("object without a class")?;
         let mut chain = vec![class];
-        while let Some(parent) = self.stream.classes[*chain.last().expect("non-empty")].super_class
-        {
+        let mut current = class;
+        while let Some(parent) = self.stream.classes[current].super_class {
+            current = parent;
             if chain.len() > 64 {
                 return Err("class hierarchy too deep".into());
             }
@@ -327,17 +326,11 @@ impl Reader<'_> {
         Ok(match code {
             b'B' => BbValue::Int(i64::from(be(1)?[0] as i8)),
             b'Z' => BbValue::Bool(be(1)?[0] != 0),
-            b'C' | b'S' => BbValue::Int(i64::from(i16::from_be_bytes(
-                be(2)?.try_into().expect("two"),
-            ))),
-            b'I' => BbValue::Int(i64::from(i32::from_be_bytes(
-                be(4)?.try_into().expect("four"),
-            ))),
-            b'J' => BbValue::Int(i64::from_be_bytes(be(8)?.try_into().expect("eight"))),
-            b'F' => BbValue::Float(f64::from(f32::from_be_bytes(
-                be(4)?.try_into().expect("four"),
-            ))),
-            b'D' => BbValue::Float(f64::from_be_bytes(be(8)?.try_into().expect("eight"))),
+            b'C' | b'S' => BbValue::Int(i64::from(i16::from_be_bytes(fixed(&be(2)?)))),
+            b'I' => BbValue::Int(i64::from(i32::from_be_bytes(fixed(&be(4)?)))),
+            b'J' => BbValue::Int(i64::from_be_bytes(fixed(&be(8)?))),
+            b'F' => BbValue::Float(f64::from(f32::from_be_bytes(fixed(&be(4)?)))),
+            b'D' => BbValue::Float(f64::from_be_bytes(fixed(&be(8)?))),
             b'L' | b'[' => self.value()?,
             other => return Err(format!("unknown field type {:?}", other as char)),
         })
@@ -374,17 +367,11 @@ fn le_primitive(code: u8, chunk: &[u8]) -> BbValue {
     match code {
         b'B' => BbValue::Int(i64::from(chunk[0] as i8)),
         b'Z' => BbValue::Bool(chunk[0] != 0),
-        b'S' | b'C' => BbValue::Int(i64::from(i16::from_le_bytes(
-            chunk.try_into().expect("two"),
-        ))),
-        b'I' => BbValue::Int(i64::from(i32::from_le_bytes(
-            chunk.try_into().expect("four"),
-        ))),
-        b'J' => BbValue::Int(i64::from_le_bytes(chunk.try_into().expect("eight"))),
-        b'F' => BbValue::Float(f64::from(f32::from_le_bytes(
-            chunk.try_into().expect("four"),
-        ))),
-        _ => BbValue::Float(f64::from_le_bytes(chunk.try_into().expect("eight"))),
+        b'S' | b'C' => BbValue::Int(i64::from(i16::from_le_bytes(fixed(chunk)))),
+        b'I' => BbValue::Int(i64::from(i32::from_le_bytes(fixed(chunk)))),
+        b'J' => BbValue::Int(i64::from_le_bytes(fixed(chunk))),
+        b'F' => BbValue::Float(f64::from(f32::from_le_bytes(fixed(chunk)))),
+        _ => BbValue::Float(f64::from_le_bytes(fixed(chunk))),
     }
 }
 

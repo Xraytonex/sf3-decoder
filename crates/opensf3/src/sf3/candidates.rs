@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use super::project::ModificationType;
-use super::records::{Records, read_f32, read_i32};
+use super::records::{read_f32, read_i32, Records};
 use crate::chemistry::{mass_error, peptide_mass};
 use crate::model::{Modification, Peptide, Score, Site};
 
@@ -45,7 +45,7 @@ pub(crate) struct EngineScores {
 pub(crate) enum Expectation {
     /// Mascot's follows from its ion score and identity threshold.
     Mascot { score: usize, identity: usize },
-    /// Stored as −log10 of the value (MSFragger).
+    /// Stored as -log10 of the value (MSFragger).
     NegLog10 { offset: usize, name: &'static str },
 }
 
@@ -134,7 +134,7 @@ pub(crate) fn engine_scores(program: &str) -> Option<EngineScores> {
                 name: "MSFragger:expectation value",
             }),
         },
-        // Scaffold's list says 66 and 74 are −log expectation values and 70
+        // Scaffold's list says 66 and 74 are -log expectation values and 70
         // the hyperscore, but 70 ranks targets better when lower, which no
         // hyperscore does; 66 separates targets from decoys best.
         "x! tandem" | "x!tandem" => EngineScores {
@@ -211,7 +211,7 @@ impl Decoded {
             letters
                 .iter()
                 .position(|&letter| letter == residues[index])
-                .expect("listed")
+                .unwrap_or_default() // every implied residue is listed above
         };
         let choices: Vec<&[(String, f64)]> = letters
             .iter()
@@ -487,11 +487,9 @@ mod tests {
         let (peptide, total) = decoded("PEPCK", &[3]).resolve(mh, &options, 1.0).unwrap();
         assert_eq!(peptide.key(), "PEPC[Nethylmaleimide]K");
         assert!((total.unwrap() - mass - 125.047_679).abs() < 1e-9);
-        assert!(
-            decoded("PEPCK", &[3])
-                .resolve(mh + 30.0, &options, 1.0)
-                .is_none()
-        );
+        assert!(decoded("PEPCK", &[3])
+            .resolve(mh + 30.0, &options, 1.0)
+            .is_none());
         assert!(decoded("PEPMK", &[3]).resolve(mh, &options, 1.0).is_none());
         // Two options within the tolerance of each other are ambiguous.
         let close: ResidueOptions = [('C', vec![("A".into(), 57.0), ("B".into(), 57.5)])].into();

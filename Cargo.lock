@@ -240,6 +240,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "openmassspec-core"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d11eb6376e628cb354ac492308d43de89994a4292bab74b8393bca5aa12fe463"
+dependencies = [
+ "flate2",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "opensf3"
+version = "0.2.0"
+dependencies = [
+ "flate2",
+ "openmassspec-core",
+ "rusqlite",
+ "thiserror",
+]
+
+[[package]]
+name = "opensf3-cli"
+version = "0.2.0"
+dependencies = [
+ "clap",
+ "openmassspec-core",
+ "opensf3",
+]
+
+[[package]]
 name = "pkg-config"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -278,13 +308,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "sf3-decoder"
-version = "0.1.0"
+name = "serde"
+version = "1.0.229"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
- "clap",
- "flate2",
- "rusqlite",
- "thiserror",
+ "serde_core",
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_core"
+version = "1.0.229"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.229"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.8",
 ]
 
 [[package]]

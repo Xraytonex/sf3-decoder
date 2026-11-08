@@ -3,8 +3,8 @@
 //!
 //! A record type `Name` has a descriptor stream `Name` holding a
 //! `MathmaticTranslationTable`, and parts `Name0`, `Name1`, ... of
-//! fixed-size blocks. Record id → part `id >> FILE_SHIFT`, block
-//! `id & (2^FILE_SHIFT − 1)`; the table lists the last block used in each
+//! fixed-size blocks. Record id -> part `id >> FILE_SHIFT`, block
+//! `id & (2^FILE_SHIFT - 1)`; the table lists the last block used in each
 //! part, and every block starts with its own id (checked on every read).
 
 use std::io::Read;
@@ -16,7 +16,7 @@ use flate2::read::MultiGzDecoder;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
 use super::java::Stream;
-use super::{Sf3Error, layout};
+use super::{layout, Sf3Error};
 
 /// No inner file of a real project comes near this; a larger one is
 /// refused rather than inflated.
@@ -160,7 +160,7 @@ impl Container {
     }
 
     /// Chained records: fixed-size blocks, each carrying its chain's id
-    /// first and the next block's index in its part last (−1 ends the
+    /// first and the next block's index in its part last (-1 ends the
     /// chain). Strings and peak lists are stored this way.
     pub fn chains(&self, name: &str, size: usize) -> Result<Records, Sf3Error> {
         let records = self.load(name, size, true)?;
@@ -310,7 +310,7 @@ impl Records {
     }
 
     /// The blocks of a chained record, in order: each block's last four
-    /// bytes give the next block's index in the same part, −1 ends it.
+    /// bytes give the next block's index in the same part, -1 ends it.
     /// `None` when a block is missing, belongs to another chain, or the
     /// chain never ends.
     pub fn chain(&self, id: i32) -> Option<Vec<&[u8]>> {
@@ -361,22 +361,31 @@ impl Records {
     }
 }
 
+/// The first `N` bytes of a slice the caller has already checked holds at
+/// least `N` (zero-padded otherwise, so a slip can never panic).
+pub(crate) fn fixed<const N: usize>(bytes: &[u8]) -> [u8; N] {
+    let mut out = [0u8; N];
+    let n = bytes.len().min(N);
+    out[..n].copy_from_slice(&bytes[..n]);
+    out
+}
+
 pub(crate) fn read_i32(block: &[u8], offset: usize) -> Option<i32> {
     block
         .get(offset..offset + 4)
-        .map(|bytes| i32::from_le_bytes(bytes.try_into().expect("four bytes")))
+        .map(|bytes| i32::from_le_bytes(fixed(bytes)))
 }
 
 pub(crate) fn read_f32(block: &[u8], offset: usize) -> Option<f32> {
     block
         .get(offset..offset + 4)
-        .map(|bytes| f32::from_le_bytes(bytes.try_into().expect("four bytes")))
+        .map(|bytes| f32::from_le_bytes(fixed(bytes)))
 }
 
 pub(crate) fn read_f64(block: &[u8], offset: usize) -> Option<f64> {
     block
         .get(offset..offset + 8)
-        .map(|bytes| f64::from_le_bytes(bytes.try_into().expect("eight bytes")))
+        .map(|bytes| f64::from_le_bytes(fixed(bytes)))
 }
 
 /// Records over one part of `blocks` (shift 15), for tests.

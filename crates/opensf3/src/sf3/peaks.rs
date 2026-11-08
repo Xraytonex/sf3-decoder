@@ -6,10 +6,10 @@
 //! pairs, the next block's index in its part; NaN after the last pair, 0 at
 //! 164 for no chain). The 20 are Scaffold's picks and the chain everything
 //! else, so a spectrum is both together. Scaffold keeps at most 300 peaks.
-//! Unused slots of the 20 hold (0, 0), or (−1, −1) in 5.2.2. All f32 LE.
+//! Unused slots of the 20 hold (0, 0), or (-1, -1) in 5.2.2. All f32 LE.
 
+use super::records::{read_f32, read_i32, Container, Records};
 use super::Sf3Error;
-use super::records::{Container, Records, read_f32, read_i32};
 
 const SUMMARY_BLOCK: usize = 180;
 const PEAK_BLOCK: usize = 232;
@@ -111,8 +111,8 @@ mod tests {
 
     #[test]
     fn a_spectrum_is_its_twenty_peaks_and_its_chain_sorted_by_mz() {
-        // Record 1: two picked peaks, then a chain of two blocks (1 → 2)
-        // with 28 + 1 more; record 2: picked peaks only, (−1, −1) padding.
+        // Record 1: two picked peaks, then a chain of two blocks (1 -> 2)
+        // with 28 + 1 more; record 2: picked peaks only, (-1, -1) padding.
         let full: Vec<(f32, f32)> = (0..28).map(|k| (10.0, 300.0 + k as f32)).collect();
         let store = PeakStore {
             summaries: test_records(

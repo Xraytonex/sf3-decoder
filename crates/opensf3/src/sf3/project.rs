@@ -1,13 +1,13 @@
 //! The project graph (the `Experiment` stream and friends): biosamples, MS
 //! runs and their spectra, search programs, modifications, proteins, the
-//! peptide → protein map, protein groups and the saved thresholds.
+//! peptide -> protein map, protein groups and the saved thresholds.
 
 use std::collections::{HashMap, HashSet};
 
 use super::blockbased::{self, BbValue};
 use super::java::{ArrayData, Stream, Value};
 use super::records::Container;
-use super::{Sf3Error, layout};
+use super::{layout, Sf3Error};
 use crate::model::Thresholds;
 
 /// Scaffold's label for a biosample without a category.
@@ -125,7 +125,7 @@ pub(crate) fn runs(container: &Container, experiment: &Stream) -> Result<Vec<Run
 }
 
 /// The spectrum-analysis ids of a collation's `spectrumGroupIndex`: an
-/// array of TreeMaps (precursor mass → TIntArrayList).
+/// array of TreeMaps (precursor mass -> TIntArrayList).
 fn collation_analyses(index: &BbValue) -> Vec<i32> {
     let BbValue::Array(trees) = index else {
         return Vec::new();
@@ -219,9 +219,9 @@ pub(crate) fn protein_groups(experiment: &Stream) -> Vec<GroupEntry> {
             let preferred = experiment
                 .object(group, "preferredAnnotation")
                 .and_then(|annotation| experiment.str(annotation, "accessionNumber"));
-            if let Some(preferred) = preferred
-                && let Some(position) = accessions.iter().position(|known| known == preferred)
-            {
+            let position = preferred
+                .and_then(|preferred| accessions.iter().position(|known| known == preferred));
+            if let Some(position) = position {
                 let first = accessions.remove(position);
                 accessions.insert(0, first);
             }
@@ -298,7 +298,7 @@ pub(crate) fn modification_types(
     Ok(types)
 }
 
-/// Peptide sequence → accessions of the proteins Scaffold maps it to.
+/// Peptide sequence -> accessions of the proteins Scaffold maps it to.
 pub(crate) fn protein_map(container: &Container) -> Result<HashMap<String, Vec<String>>, Sf3Error> {
     let Some(stream) = container.optional_stream("IdentificationCacheLookup")? else {
         return Ok(HashMap::new());

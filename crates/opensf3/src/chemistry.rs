@@ -47,13 +47,13 @@ pub fn mz_from_mh(mh: f64, charge: u8) -> f64 {
 }
 
 /// Neutral mass error in daltons against an [M+H]+, allowing the isotope
-/// errors engines search (−1..+3).
+/// errors engines search (-1..+3).
 pub fn mass_error(mass: f64, mh: f64) -> f64 {
     let observed = mh - PROTON;
     (-1..=3)
         .map(|isotope| observed - mass - f64::from(isotope) * ISOTOPE_SPACING)
         .min_by(|a, b| a.abs().total_cmp(&b.abs()))
-        .expect("five isotopes")
+        .unwrap_or(f64::NAN)
 }
 
 #[cfg(test)]

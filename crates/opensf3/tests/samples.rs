@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use sf3_decoder::chemistry::mass_error;
-use sf3_decoder::mgf::write_mgf;
-use sf3_decoder::mzid::write_mzid;
+use opensf3::chemistry::mass_error;
+use opensf3::mgf::write_mgf;
+use opensf3::mzid::write_mzid;
 
 fn samples() -> Vec<PathBuf> {
     let Some(folder) = std::env::var_os("SF3_SAMPLES") else {
@@ -25,8 +25,8 @@ fn samples() -> Vec<PathBuf> {
 #[test]
 fn every_sample_decodes_consistently() {
     for path in samples() {
-        let project = sf3_decoder::decode(&path)
-            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        let project =
+            opensf3::decode(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         let name = path.display();
         assert!(!project.runs.is_empty(), "{name}");
         let mut unreadable = 0;
