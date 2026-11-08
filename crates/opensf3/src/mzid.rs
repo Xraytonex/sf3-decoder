@@ -462,7 +462,7 @@ impl<'a, W: Write> Writer<'a, W> {
         for score in &found.scores {
             self.put(&format!(
                 "            {}",
-                param(&score.name, score.accession.as_deref(), score.value)
+                score_param(&score.name, score.accession.as_deref(), score.value)
             ))?;
         }
         if let Some(probability) = found.probability {
@@ -597,6 +597,35 @@ fn passes_peptide(found: &Match, thresholds: Option<Thresholds>) -> bool {
         })
 }
 
+/// PSI-MS score terms the writer knows the exact names of. `.sfdb` files
+/// state their own accession and name per score, not always with PSI-MS's
+/// spelling (`Sequest:xcorr` for `SEQUEST:xcorr`).
+const PSI_MS_SCORES: &[(&str, &str)] = &[
+    ("MS:1001171", "Mascot:score"),
+    ("MS:1001172", "Mascot:expectation value"),
+    ("MS:1001370", "Mascot:homology threshold"),
+    ("MS:1001371", "Mascot:identity threshold"),
+    ("MS:1001155", "SEQUEST:xcorr"),
+    ("MS:1001156", "SEQUEST:deltacn"),
+    ("MS:1001157", "SEQUEST:sp"),
+    ("MS:1002338", "Andromeda:score"),
+    ("MS:1001572", "SpectrumMill:Score"),
+    ("MS:1001573", "SpectrumMill:SPI"),
+];
+
+/// A score as a cvParam with PSI-MS's own name when its accession is one
+/// the writer knows, else as a userParam under the file's name (an
+/// accession whose exact name isn't known is not written, so no cvParam
+/// pairs an accession with a wrong name).
+fn score_param(name: &str, accession: Option<&str>, value: f64) -> String {
+    let known =
+        accession.and_then(|accession| PSI_MS_SCORES.iter().find(|(known, _)| *known == accession));
+    match known {
+        Some((accession, name)) => param(name, Some(accession), value),
+        None => param(name, None, value),
+    }
+}
+
 fn param(name: &str, accession: Option<&str>, value: f64) -> String {
     match accession {
         Some(accession) => format!(
@@ -724,5 +753,17 @@ mod tests {
             "MS:1001207"
         );
         assert_eq!(software_term("Byonic"), None);
+    }
+
+    #[test]
+    fn scores_use_psi_ms_names_or_none() {
+        assert_eq!(
+            score_param("Sequest:xcorr", Some("MS:1001155"), 2.5),
+            r#"<cvParam cvRef="PSI-MS" accession="MS:1001155" name="SEQUEST:xcorr" value="2.5"/>"#
+        );
+        assert_eq!(
+            score_param("SEQUEST:sprank", Some("MS:1002249"), 1.0),
+            r#"<userParam name="SEQUEST:sprank" value="1"/>"#
+        );
     }
 }

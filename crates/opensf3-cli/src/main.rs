@@ -130,12 +130,19 @@ fn mzid(project: &Project, path: &Path, force: bool) -> Result<(), String> {
     let report = write_mzid(project, &mut out)
         .and_then(|report| out.flush().map(|()| report))
         .map_err(|error| format!("{}: {error}", path.display()))?;
-    eprintln!(
-        "wrote {} ({} candidates, {} protein groups)",
-        path.display(),
-        report.candidates,
-        report.groups
-    );
+    match project.format {
+        Kind::Sf3 => eprintln!(
+            "wrote {} ({} candidates, {} protein groups)",
+            path.display(),
+            report.candidates,
+            report.groups
+        ),
+        _ => eprintln!(
+            "wrote {} ({} candidates; no protein groups: Scaffold's aren't read from an .sfdb)",
+            path.display(),
+            report.candidates
+        ),
+    }
     if report.groups_without_peptides > 0 {
         eprintln!(
             "  {} protein groups left out: none of their peptides is a candidate Scaffold picked",
