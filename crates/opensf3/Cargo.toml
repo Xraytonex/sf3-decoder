@@ -23,3 +23,16 @@ flate2 = { workspace = true }
 openmassspec-core = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+flate2 = { workspace = true }
+rusqlite = { workspace = true }
+tempfile = "3"
+
+[[test]]
+name = "sfdb"
+required-features = ["mzid"]
+
+[[test]]
+name = "samples"
+required-features = ["mzid"]
