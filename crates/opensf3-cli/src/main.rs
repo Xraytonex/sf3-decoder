@@ -4,20 +4,22 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, ValueEnum};
+use openmassspec_core::write_indexed_mzml;
 use opensf3::mgf::write_mgf;
 use opensf3::mzid::write_mzid;
 use opensf3::output::mgf_names;
-use opensf3::Project;
+use opensf3::{Format as Kind, Project, Reader};
 
-/// Convert Proteome Software's .sf3 files into more commonly used formats.
+/// Convert Proteome Software's Scaffold files (.sf3, .sfdb) into more
+/// commonly used formats.
 #[derive(Parser)]
 #[command(name = "sf3decode", version)]
 struct Args {
-    /// The Scaffold .sf3 file.
+    /// The Scaffold .sf3 or .sfdb file.
     file: PathBuf,
     /// What to write; without it, prints what the file holds.
     format: Option<Format>,
-    /// Folder to write into [default: the .sf3 file's folder].
+    /// Folder to write into [default: the Scaffold file's folder].
     #[arg(short, long)]
     out: Option<PathBuf>,
     /// Replace files that already exist.
@@ -29,23 +31,26 @@ struct Args {
 enum Format {
     /// One MGF per MS run, with every spectrum's peaks.
     Mgf,
-    /// mzIdentML 1.2: every engine's candidates, Scaffold's probabilities
-    /// and protein groups.
+    /// mzIdentML 1.2: every engine's candidates with their scores, and
+    /// for .sf3 Scaffold's probabilities and protein groups.
     #[value(alias = "mzidentml")]
     Mzid,
+    /// One indexed mzML 1.1 per MS run, with every spectrum's peaks.
+    Mzml,
 }
 
 fn main() -> ExitCode {
     let args = Args::parse();
-    let project = match opensf3::decode(&args.file) {
-        Ok(project) => project,
+    let reader = match Reader::open(&args.file) {
+        Ok(reader) => reader,
         Err(error) => {
             eprintln!("sf3decode: {}: {error}", args.file.display());
             return ExitCode::FAILURE;
         }
     };
+    let project = reader.project();
     let Some(format) = args.format else {
-        summary(&project);
+        summary(project);
         return ExitCode::SUCCESS;
     };
     let folder = args.out.clone().unwrap_or_else(|| {
@@ -54,11 +59,12 @@ fn main() -> ExitCode {
             .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
     });
     let written = match format {
-        Format::Mgf => mgf(&project, &folder, args.force),
+        Format::Mgf => mgf(project, &folder, args.force),
         Format::Mzid => {
             let stem = args.file.file_stem().unwrap_or_default().to_string_lossy();
-            mzid(&project, &folder.join(format!("{stem}.mzid")), args.force)
+            mzid(project, &folder.join(format!("{stem}.mzid")), args.force)
         }
+        Format::Mzml => mzml(&reader, &folder, args.force),
     };
     match written {
         Ok(()) => {
@@ -94,6 +100,27 @@ fn mgf(project: &Project, folder: &Path, force: bool) -> Result<(), String> {
                 report.without_charge
             );
         }
+    }
+    Ok(())
+}
+
+/// One indexed mzML per run, named like its MGF.
+fn mzml(reader: &Reader, folder: &Path, force: bool) -> Result<(), String> {
+    let names = mgf_names(reader.project());
+    for (run, name) in names.iter().enumerate() {
+        let stem = name.strip_suffix(".mgf").unwrap_or(name);
+        let path = folder.join(format!("{stem}.mzML"));
+        let mut source = reader.run_spectra(run).map_err(|error| error.to_string())?;
+        let mut out = create(&path, force)?;
+        let written = write_indexed_mzml(&mut source, &mut out)
+            .map_err(|error| error.to_string())
+            .and_then(|summary| {
+                out.flush()
+                    .map(|()| summary.spectra_written)
+                    .map_err(|error| error.to_string())
+            })
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        eprintln!("wrote {} ({written} spectra)", path.display());
     }
     Ok(())
 }
@@ -155,7 +182,7 @@ fn summary(project: &Project) {
         .scaffold_version
         .as_deref()
         .unwrap_or("unknown version");
-    println!("{} ({version})", project.name);
+    println!("{} (.{}, {version})", project.name, project.format.as_str());
     println!(
         "  {} runs, {} spectra",
         project.runs.len(),
@@ -172,17 +199,23 @@ fn summary(project: &Project) {
             total += 1;
             chosen += usize::from(found.chosen);
         }
-        println!(
-            "  {} {}: {total} candidates, {chosen} picked by Scaffold",
-            engine.name,
-            engine.version.as_deref().unwrap_or("")
-        );
+        let version = engine.version.as_deref().unwrap_or("");
+        match project.format {
+            Kind::Sf3 => println!(
+                "  {} {version}: {total} candidates, {chosen} picked by Scaffold",
+                engine.name
+            ),
+            _ => println!("  {} {version}: {total} candidates", engine.name),
+        }
     }
-    println!(
-        "  {} proteins, {} protein groups",
-        project.proteins.len(),
-        project.groups.len()
-    );
+    match project.format {
+        Kind::Sf3 => println!(
+            "  {} proteins, {} protein groups",
+            project.proteins.len(),
+            project.groups.len()
+        ),
+        _ => println!("  {} proteins", project.proteins.len()),
+    }
     if let Some(thresholds) = project.thresholds {
         println!(
             "  saved thresholds: peptides {:.0}%, proteins {:.0}%, at least {} peptides",
