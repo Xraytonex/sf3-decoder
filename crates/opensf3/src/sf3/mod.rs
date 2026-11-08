@@ -18,6 +18,7 @@ use std::path::Path;
 use crate::chemistry::mass_error;
 use crate::decoy::is_decoy_accession;
 use crate::model::{Engine, Match, Peptide, Project, Protein, ProteinGroup, Run, Score, Spectrum};
+use crate::titles::{drop_clashing_scans, scan_from_title};
 use accessions::{proteins_of, Completions, INLINE_ACCESSION_MAX, PROTEIN_BLOCK};
 use candidates::{analysis_of, engine_scores, Candidate, EngineScores, Peptides, PEPTIDE_BLOCK};
 use peaks::PeakStore;
@@ -108,12 +109,15 @@ pub fn decode(path: &Path) -> Result<Project, Sf3Error> {
 
     let spectrum_run = spectrum_runs(&runs, &analyses, &spectrum_records)?;
     let mut spectra = spectra(&spectrum_run, &spectrum_records, &titles);
+    let mut notes = Notes {
+        scan_clashes: drop_clashing_scans(&mut spectra),
+        ..Notes::default()
+    };
     let position: HashMap<i32, usize> = spectra
         .iter()
         .enumerate()
         .map(|(index, spectrum)| (spectrum.id, index))
         .collect();
-    let mut notes = Notes::default();
 
     // (spectrum, engine) -> candidates, in record order.
     let mut engines: Vec<Engine> = Vec::new();
@@ -294,12 +298,14 @@ fn spectra(
     ids.into_iter()
         .filter_map(|(run, id)| {
             let block = records.get(id)?; // checked in spectrum_runs
+            let title = titles
+                .string(read_i32(block, 8).unwrap_or(0))
+                .filter(|title| !title.trim().is_empty());
             Some(Spectrum {
                 id,
                 run,
-                title: titles
-                    .string(read_i32(block, 8).unwrap_or(0))
-                    .filter(|title| !title.trim().is_empty()),
+                scan: title.as_deref().and_then(scan_from_title),
+                title,
                 mh: read_f64(block, 12).filter(|mh| mh.is_finite() && *mh > 0.0),
                 charge: read_i32(block, 20)
                     .and_then(|charge| u8::try_from(charge).ok())
@@ -503,6 +509,7 @@ struct Notes {
     dropped_sequences: usize,
     cut_accessions: usize,
     unplaced_group_rows: usize,
+    scan_clashes: usize,
     peaks_unreadable: Option<String>,
 }
 
@@ -534,6 +541,11 @@ impl Notes {
         note(
             self.duplicates,
             "repeated copies of candidates were counted once.",
+        );
+        note(
+            self.scan_clashes,
+            "spectra name a scan another spectrum of their run names too; their scan \
+             number is left out.",
         );
         note(
             self.cut_accessions,

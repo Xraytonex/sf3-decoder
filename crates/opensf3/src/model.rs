@@ -40,6 +40,9 @@ pub struct Spectrum {
     pub id: i32,
     pub run: usize,
     pub title: Option<String>,
+    /// The scan the title names, when it names exactly one and no other
+    /// spectrum of the run names the same.
+    pub scan: Option<u32>,
     /// Scaffold stores the precursor as [M+H]+, not m/z.
     pub mh: Option<f64>,
     pub charge: Option<u8>,
@@ -50,6 +53,21 @@ pub struct Spectrum {
 }
 
 impl Spectrum {
+    #[cfg(test)]
+    pub(crate) fn for_tests(run: usize, scan: Option<u32>) -> Self {
+        Self {
+            id: 0,
+            run,
+            title: None,
+            scan,
+            mh: None,
+            charge: None,
+            rt_seconds: None,
+            peak_list: 0,
+            matches: Vec::new(),
+        }
+    }
+
     pub fn precursor_mz(&self) -> Option<f64> {
         Some(mz_from_mh(self.mh?, self.charge?))
     }

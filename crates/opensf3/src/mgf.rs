@@ -33,6 +33,9 @@ pub fn write_mgf(project: &Project, run: usize, out: &mut impl Write) -> io::Res
             }
             _ => report.without_charge += 1,
         }
+        if let Some(scan) = spectrum.scan {
+            writeln!(out, "SCANS={scan}")?;
+        }
         if let Some(rt) = spectrum.rt_seconds {
             writeln!(out, "RTINSECONDS={rt:.3}")?;
         }

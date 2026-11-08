@@ -9,6 +9,7 @@ pub mod model;
 pub mod mzid;
 pub mod output;
 pub mod sf3;
+mod titles;
 mod unimod;
 mod uniprot;
 

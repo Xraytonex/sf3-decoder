@@ -388,6 +388,11 @@ impl<'a, W: Write> Writer<'a, W> {
                     escape(title)
                 ))?;
             }
+            if let Some(scan) = spectrum.scan {
+                self.put(&format!(
+                    r#"          <cvParam cvRef="PSI-MS" accession="MS:1000797" name="peak list scans" value="{scan}"/>"#
+                ))?;
+            }
             if let Some(rt) = spectrum.rt_seconds {
                 self.put(&format!(
                     r#"          <cvParam cvRef="PSI-MS" accession="MS:1000016" name="scan start time" value="{rt}" unitCvRef="UO" unitAccession="UO:0000010" unitName="second"/>"#
