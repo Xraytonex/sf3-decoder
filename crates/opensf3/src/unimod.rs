@@ -59,6 +59,7 @@ const TABLE: &[(u32, &str, f64)] = &[
     (2017, "TMTpro_zero", 295.189_592),
 ];
 
+#[cfg(feature = "mzid")]
 const MASS_TOLERANCE: f64 = 0.01;
 /// Deltas this close to a table entry are that modification reported at
 /// lower precision (3-decimal engines are within 0.0005). Small enough to
@@ -94,6 +95,7 @@ pub(crate) fn named_by_accession(accession: &str, mass_delta: f64) -> Option<&'s
         .map(|(_, known, _)| *known)
 }
 
+#[cfg(feature = "mzid")]
 /// `("UNIMOD:35", "Oxidation")` for a modification named `Oxidation` (any
 /// case) of about +15.995 Da.
 pub fn lookup(name: &str, mass_delta: f64) -> Option<(String, &'static str)> {
@@ -110,6 +112,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "mzid")]
     fn names_map_only_when_the_mass_agrees() {
         assert_eq!(
             lookup("oxidation", 15.9949),
