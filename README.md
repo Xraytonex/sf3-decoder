@@ -1,182 +1,209 @@
-# sf3-decoder
+# opensf3 (sf3-decoder)
 
-Binary to convert Proteome Software's .sf3 files into more commonly used formats.
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Rust MSRV](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 
-Scaffold saves its projects as `.sf3` files, and only Scaffold can open them.
-`sf3decode` reads one and writes out what's in it, including Scaffold's own
-probabilities, so the results can be used elsewhere. Scaffold Viewer can
-export mzIdentML and MGF one file at a time through its interface;
-`sf3decode` does it from the command line, for scripts and pipelines, and
-includes every engine's candidates and scores.
+> Built to fit the [OpenMassSpec](https://github.com/Sigilweaver/OpenMassSpec)
+> stack: its spectra are an `openmassspec-core` `SpectrumSource`.
 
-## How this was made
+Rust reader for Proteome Software's Scaffold files, with no Scaffold
+software or SDK: `.sf3` projects (Scaffold 4.0 to 5.3.4) and `.sfdb`
+databases (Scaffold 5.1, Scaffold DDA 6.5). Only Scaffold opens these
+files. opensf3 reads one and gives back what's in it: the MS runs, every
+stored MS/MS peak list, every search engine's candidate peptides with
+their scores, the proteins, and for `.sf3` Scaffold's own peptide and
+protein probabilities, protein groups and saved thresholds.
 
-The format was worked out from about twenty `.sf3` files that are publicly
-available, mostly from PRIDE submissions, written by Scaffold 4.0 through
-5.3.4. Scaffold itself was never run, decompiled or disassembled for this,
-and none of its code is in this repository. It was pretty much brute force:
-unpack the file, guess what a stretch of bytes means, and check the guess
-against something known independently (peptide masses against precursor
-masses, scores against the search engines' ranges, titles against retention
-times) across every sample until it held everywhere. That's how open readers
-for most closed data formats get written. Nothing here required accepting
-Scaffold's license, getting around any protection, or looking at its code;
-it's reading data files for interoperability, which is lawful. The decoder
-only reads; it never writes `.sf3`.
+The workspace has two crates:
 
-This project is not affiliated with or endorsed by Proteome Software.
-Scaffold is their trademark.
+- `opensf3` (library): `Reader::open` tells `.sf3` from `.sfdb` by content
+  and decodes either into a `Project`; each run's peak lists are an
+  `openmassspec_core::SpectrumSource`, so the stack's mzML writer can
+  write them; MGF and mzIdentML 1.2 writers are included.
+- `opensf3-cli`: the `sf3decode` command (summary, `mgf`, `mzid`, `mzml`).
 
-## How to use
+Scaffold Viewer can export mzIdentML and MGF one file at a time through
+its interface; `sf3decode` does it from the command line, for scripts and
+pipelines, and includes every engine's candidates and scores.
 
-Install with Rust (1.88 or newer):
+## Known issues and gaps
+
+Checked on the files in [CORPUS.md](CORPUS.md).
+
+- **Scaffold versions.** `.sf3` from Scaffold 4.0 through 5.3.4 and
+  `.sfdb` from Scaffold 5.1.2 and Scaffold DDA 6.5 have been checked.
+  Anything else (Scaffold DDA 7.x `.sfdb`, Scaffold DDA `.sf3` if it
+  exists) is untested and may be refused. A file whose structure doesn't
+  hold up is refused, never half-read.
+- **`.sfdb` carries no Scaffold verdicts here.** Scaffold's peptide and
+  protein probabilities, protein groups and thresholds are not read from
+  `.sfdb` files, because what those columns mean in this layout isn't
+  settled. An `.sfdb` gives engine candidates and scores only: its
+  mzIdentML has every candidate under a "no threshold" protocol (so
+  `passThreshold` is true for all, as the specification asks when no
+  threshold was applied) and no protein detection. Post-processor scores
+  stored in the file (Percolator's PEP, PeptideProphet) are left out too.
+- **Engines.** In `.sf3`, only Mascot, Sequest, X! Tandem, MaxQuant,
+  Spectrum Mill and MSFragger are converted; other engines' candidates are
+  left out, since where their scores sit isn't known yet. X! Tandem's
+  scores are named by offset, because Scaffold's own names for them don't
+  fit the values. In `.sfdb`, scores are named as the file names them;
+  in mzIdentML a score is a PSI-MS cvParam only when the writer knows that
+  term's exact name, else a userParam.
+- **Ranks.** Candidates are ranked by each engine's own main score. In
+  `.sf3` equal scores share a rank; in `.sfdb` equal scores are broken by
+  the file's PSM id (a target and a decoy with the same score then rank
+  in file order).
+- **Peaks.** Scaffold keeps at most 300 peaks per spectrum, so MGF and
+  mzML hold Scaffold's peak lists, not the raw spectra. Every spectrum is
+  written as a centroided MS2 spectrum.
+- **mzML.** Scaffold files don't say which instrument recorded a run, so
+  the instrument is the generic "instrument model" term and the source
+  file is the Scaffold file. A spectrum without a stored retention time
+  gets 0 (the writer requires one) with `opensf3.no_retention_time` set.
+  An `.sf3` spectrum without a charge has no m/z, so its precursor is
+  empty; such spectra fail `openmassspec-core`'s precursor invariant.
+- **Spectra without a charge** (in `.sf3`) go into the MGF without
+  `PEPMASS`, and their candidates are left out of the mzIdentML.
+- **Scan numbers** come only from titles that name exactly one scan; two
+  spectra of one run naming the same scan both lose it.
+- **Protein pass flags** in `.sf3` mzIdentML are rebuilt from the saved
+  rule and may differ slightly from Scaffold's own list. Protein groups
+  with no peptide Scaffold picked, and protein sequences with a `*` inside,
+  can't be written in valid mzIdentML and are left out. The searched
+  database itself isn't in the file, only the proteins it matched.
+- Some Scaffold 4.11 demo files store protein sequences that don't contain
+  their own peptides; those sequences are dropped.
+- Quantitation (TMT/iTRAQ reporter intensities, SILAC channels) and GO
+  annotations are not converted.
+- Large projects need memory: 2.3 GB for a 500 MB `.sf3`, 1.1 GB for the
+  1 GB PXD071927 `.sfdb`. An mzIdentML with every candidate of every rank
+  can run to hundreds of MB (675 MB for PXD071927).
+
+## Install
+
+With Rust 1.88 or newer, the command-line tool:
 
 ```
-cargo install --git https://github.com/Xraytonex/sf3-decoder
+cargo install --git https://github.com/Xraytonex/sf3-decoder opensf3-cli
 ```
 
-Then:
+The library, in `Cargo.toml`:
+
+```toml
+[dependencies]
+opensf3 = { git = "https://github.com/Xraytonex/sf3-decoder" }
+openmassspec-core = "3.0.0"
+```
+
+The mzIdentML writer is behind the default `mzid` feature.
+
+## Quickstart
+
+### Command line
 
 ```
 sf3decode project.sf3
 ```
 
-prints what the file holds: runs, spectra, each search engine's candidates,
-proteins, protein groups, the thresholds it was saved with, and anything the
-decoder had to leave out.
+prints what the file holds: runs, spectra, each search engine's
+candidates, proteins, and for `.sf3` the protein groups and saved
+thresholds, plus anything the decoder had to leave out. `.sfdb` files work
+the same way.
 
 ```
 sf3decode project.sf3 mgf
-```
-
-writes one MGF per MS run, named after the run's raw file, with every
-spectrum Scaffold kept: title, precursor m/z and charge, retention time and
-peaks. Scaffold keeps at most 300 peaks per spectrum, so these are not the
-full raw spectra. Files are written next to the `.sf3` unless `-o folder`
-says otherwise, and existing files are only replaced with `--force`.
-
-```
+sf3decode project.sf3 mzml
 sf3decode project.sf3 mzid
 ```
 
-writes `project.mzid` (mzIdentML 1.2, valid against the official schema).
-It has every candidate each search engine kept for each spectrum, ranked by
-that engine's score, with its scores, and Scaffold's peptide probability on
-each one. `passThreshold` is Scaffold's call: the candidate it picked for the
-spectrum, at or above the peptide probability the project was saved with.
-Scaffold's protein groups come with their protein probability, overall and
-per run. Their pass flag is rebuilt from the saved rule (protein probability
-in a run, plus the minimum number of peptides Scaffold picked there), so it
-may differ slightly from Scaffold's own list. Spectra are referenced by their
-position in the MGF files above, so write both into the same folder.
+`mgf` writes one MGF per MS run, named after the run's raw file, with
+every spectrum's title, precursor m/z and charge, scan (`SCANS=`, when
+the title names one), retention time and peaks. `mzml` writes one indexed
+mzML 1.1 per run with the same spectra, named the same way. `mzid` writes
+`project.mzid` (mzIdentML 1.2): every candidate each search engine kept
+for each spectrum, ranked by that engine's score, with its scores; for
+`.sf3` also Scaffold's peptide probability on each, `passThreshold` as
+Scaffold's call (the candidate it picked, at or above the saved peptide
+probability), and Scaffold's protein groups with their probability,
+overall and per run. Spectrum `N` of a run (from 0) is `index=N` in its
+MGF, its mzML, and the mzIdentML, so write them into the same folder.
+Files go next to the Scaffold file unless `-o folder` says otherwise, and
+existing files are only replaced with `--force`.
 
-The checks in `tests/samples.rs` run on real files when `SF3_SAMPLES` names
-a folder of them:
+### Library
+
+```rust
+use openmassspec_core::write_indexed_mzml;
+use opensf3::Reader;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let reader = Reader::open("project.sfdb")?;
+    let project = reader.project();
+    println!("{:?}: {} runs, {} spectra", reader.format(), project.runs.len(), project.spectra.len());
+    for spectrum in project.spectra.iter().take(3) {
+        for found in &spectrum.matches {
+            println!("{} rank {}: {}", spectrum.title.as_deref().unwrap_or("?"), found.rank, found.peptide.key());
+        }
+    }
+    for run in 0..reader.runs().len() {
+        let mut source = reader.run_spectra(run)?;
+        let mut out = std::fs::File::create(format!("run{run}.mzML"))?;
+        write_indexed_mzml(&mut source, &mut out)?;
+    }
+    Ok(())
+}
+```
+
+`Reader::open` detects the format; `opensf3::sf3::decode` and
+`opensf3::sfdb::decode` read one kind directly. `opensf3::mgf::write_mgf`
+and `opensf3::mzid::write_mzid` write MGF and mzIdentML from a `Project`.
+Errors are `opensf3::Error`, which converts into
+`openmassspec_core::Error`.
+
+## Tests
 
 ```
-SF3_SAMPLES=~/sf3-files cargo test --release
+cargo test --all
 ```
 
-## The .sf3 format
+runs everything that needs no data files: unit tests and hand-built
+`.sfdb` databases in both layouts, including an `openmassspec-core`
+conformance check. The checks on real files run when `SF3_SAMPLES` or
+`SFDB_SAMPLES` names a folder of them (Scaffold files are never part of
+the repository):
 
-An `.sf3` file is a SQLite database. Its `Files` table holds every part of
-the project as a gzip-compressed blob, and its `ProteinGroup` table holds
-Scaffold's protein probability for each protein group in each MS run. The
-inner files come in three kinds.
+```
+SF3_SAMPLES=~/sf3-files SFDB_SAMPLES=~/sfdb-files cargo test --release
+```
 
-**Java serialization streams** (starting `ac ed 00 05`). `Experiment` is the
-project itself: biosamples, MS runs, protein groups (`ProteinExperimentGroup`,
-with their accessions and decoy flag), the thresholds the project was saved
-with (`DisplayThresholds`), and for every search engine Scaffold knows the
-names of its scores. `DatabaseSearch` lists the search programs,
-`ModificationTypes` the modifications, and `IdentificationCacheLookup` maps
-every protein to its peptides. These are plain Java Object Serialization, so
-they can be read from the public specification.
+## How this was made
 
-**Fixed-size records.** Most of the data is arrays of fixed-size blocks
-split over numbered parts (`PeptideIdentification0`, `1`, …). Each type has
-a descriptor stream giving `FILE_SHIFT`: record id `n` is block
-`n & (2^FILE_SHIFT − 1)` of part `n >> FILE_SHIFT`, and every block starts
-with its own id. Numbers are little-endian.
+The `.sf3` format was worked out from about twenty `.sf3` files that are
+publicly available, mostly from PRIDE submissions, written by Scaffold 4.0
+through 5.3.4. Scaffold itself was never run, decompiled or disassembled
+for this, and none of its code is in this repository. It was pretty much
+brute force: unpack the file, guess what a stretch of bytes means, and
+check the guess against something known independently (peptide masses
+against precursor masses, scores against the search engines' ranges,
+titles against retention times) across every sample until it held
+everywhere. That's how open readers for most closed data formats get
+written. Nothing here required accepting Scaffold's license, getting
+around any protection, or looking at its code; it's reading data files for
+interoperability, which is lawful. The decoder only reads; it never writes
+`.sf3`.
 
-| record | size | what's in it |
-|---|---|---|
-| `Spectrum` | 48 | peak list id at 4, title id at 8, precursor [M+H]+ (f64) at 12, charge at 20, retention time in seconds (f32) at 32 |
-| `SpectrumAnalysis` | 180 | one per spectrum and engine: spectrum id at 4, search program at 8 |
-| `PeptideIdentification` | 160 | one candidate peptide: residues at 4–34 (the rest in `PeptideSequence`), flanking residues at 39 and 40, Scaffold's peptide probability (f32) at 49, its spectrum analysis at 57, engine scores as f32 from 66, three modifications at 90–114 (more in two int lists), the reported protein at 122, and at 147 a 0 if this is the candidate Scaffold picked |
-| `ProteinIdentification` | 103 | the engine's protein accession at 8, cut at 22 characters |
-| `PeakList` | 180 | 20 (intensity, m/z) pairs and the head of a chain holding the rest |
-| `PeakListMassIntensities` | 232 | 28 more pairs per block, chained |
+The `.sfdb` reader was worked out the same way, from two public `.sfdb`
+files (PRIDE PXD038643 and PXD071927); an `.sfdb` is a plain SQLite
+database, read read-only, and never written. Its code, and the scan
+numbers taken from spectrum titles, were ported from
+[Tuffold](https://github.com/TUFF-Industries/tuffold) (same author,
+Apache-2.0). See [ATTRIBUTION.md](ATTRIBUTION.md) and the format notes in
+[docs/format/](docs/format/): [`.sf3`](docs/format/01-sf3.md),
+[`.sfdb`](docs/format/02-sfdb.md).
 
-Strings (titles, long sequences) and peak lists are chains of blocks: each
-block carries its chain's id and, in its last four bytes, the index of the
-next block in the same part, −1 at the end.
-
-**Block-based object files** (`BBProteinSequence`, `SpectrumCollation`) use
-Scaffold's own variant of Java serialization: fields big-endian, lengths and
-arrays little-endian, a class table in a descriptor stream. Protein sequences
-and descriptions live here, and each run's `SpectrumCollation` lists its
-spectra.
-
-A few things that aren't obvious:
-
-- Scores sit at `66 + 4k`, where `k` indexes Scaffold's own list of score
-  names for that engine. The first entry is often Scaffold's discriminant
-  score rather than the engine's. X! Tandem's list doesn't match its values,
-  so its scores are named by offset.
-- A spectrum's peaks are the 20 pairs in its `PeakList` record plus its whole
-  chain. The 20 are Scaffold's picks and the chain holds the rest, isotope
-  peaks included. Scaffold keeps at most 300 peaks per spectrum.
-- Accessions stored with a candidate are cut at 22 characters, which turns a
-  decoy like `tr|A0QSM5|A0QSM5_MYCS2-DECOY` into its target's name. They are
-  completed from Scaffold's peptide → protein map, or by checking whether the
-  peptide reads forwards or backwards in the stored target sequence.
-- Older files keep a second, stale copy of many candidates; they are counted
-  once.
-- Spectrum Mill writes modified residues in lower case without saying which
-  modification. The one modification the file uses on that residue elsewhere
-  that fits the precursor mass is used.
-
-## How the decoder works
-
-`sf3decode` opens the SQLite file read-only, inflates the inner files it
-needs, and parses the Java streams into plain values (nothing in the file is
-ever executed). It reads the runs and their spectra from `Experiment` and
-the collations, then every `PeptideIdentification`: sequence,
-modifications, the engine's scores, Scaffold's probability and pick. Each
-engine's candidates for a spectrum are ranked by that engine's own main
-score. Every candidate's peptide mass is checked against its spectrum's
-precursor mass (isotope errors allowed). One that misses by more than 1 Da
-is left out, and if more than 5% miss, the file is refused as misread. The
-same goes for anything structural that doesn't hold, like a block whose id
-doesn't match its position or a chain that never ends: the file is refused
-rather than half-read. Everything left out is counted and reported.
-
-## Limitations
-
-- Only files from Scaffold 4.0 through 5.3.4 have been checked. Scaffold DDA
-  6.x files are untested and may be refused.
-- Only Mascot, Sequest, X! Tandem, MaxQuant, Spectrum Mill and MSFragger are
-  converted. Other engines' candidates are left out, since where their scores
-  sit isn't known yet.
-- X! Tandem's scores are named by offset, because Scaffold's own names for
-  them don't fit the values. MaxQuant's delta score and MSFragger's scores
-  have no PSI-MS term, so they are written as userParams.
-- Scaffold keeps at most 300 peaks per spectrum, so the MGFs are not the raw
-  spectra.
-- Spectra Scaffold stored without a charge have no m/z: they go into the MGF
-  without `PEPMASS`, and their candidates are left out of the mzIdentML.
-- Protein pass flags are rebuilt from the saved rule and may differ slightly
-  from Scaffold's own list.
-- Protein groups with no peptide Scaffold picked, and protein sequences with
-  a `*` inside, can't be written in valid mzIdentML and are left out. The
-  searched database itself isn't in the file, only the proteins it matched.
-- Some Scaffold 4.11 demo files store protein sequences that don't contain
-  their own peptides; those sequences are dropped.
-- Quantitation (TMT/iTRAQ reporter intensities, SILAC channels) and GO
-  annotations are not converted.
-- Large projects need a few GB of memory (2.3 GB for a 500 MB file), and an
-  mzIdentML with every candidate of every rank can run to hundreds of MB.
+This project is not affiliated with or endorsed by Proteome Software.
+Scaffold is their trademark.
 
 ## License
 
